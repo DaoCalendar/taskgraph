@@ -2,113 +2,13 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-
 import os
-import shutil
 import subprocess
 from textwrap import dedent
 
 import pytest
 
 from taskgraph.util.vcs import HgRepository, Repository, get_repository
-
-_FORCE_COMMIT_DATE_TIME = "2019-11-04T10:03:58+00:00"
-
-
-@pytest.fixture(scope="function")
-def hg_repo(tmpdir, monkeypatch):
-    # Set HGPLAIN to ensure local .hgrc configs don't cause test failures.
-    monkeypatch.setenv("HGPLAIN", "1")
-    repo_dir = _init_repo(tmpdir, "hg")
-    with open(os.path.join(repo_dir, ".hg", "hgrc"), "a") as f:
-        f.write(
-            """[ui]
-username = Integration Tests <integration@tests.test>
-"""
-        )
-
-    # hg sometimes errors out with "nothing changed" even though the commit succeeded
-    subprocess.call(
-        ["hg", "commit", "-m", "First commit", "--date", _FORCE_COMMIT_DATE_TIME],
-        cwd=repo_dir,
-    )
-    yield repo_dir
-
-
-_GIT_DATE_ENV_VARS = ("GIT_AUTHOR_DATE", "GIT_COMMITTER_DATE")
-
-
-@pytest.fixture(scope="function")
-def git_repo(tmpdir):
-    env = _build_env_with_git_date_env_vars(_FORCE_COMMIT_DATE_TIME)
-
-    repo_dir = _init_repo(tmpdir, "git")
-
-    subprocess.check_output(
-        ["git", "config", "user.email", "integration@tests.test"], cwd=repo_dir, env=env
-    )
-    subprocess.check_output(
-        ["git", "config", "user.name", "Integration Tests"], cwd=repo_dir, env=env
-    )
-
-    # This is mostly for local dev
-    # If gpg signing is on it will fail calculating the head ref
-    subprocess.check_output(
-        ["git", "config", "commit.gpgsign", "false"], cwd=repo_dir, env=env
-    )
-
-    subprocess.check_output(
-        ["git", "commit", "-m", "First commit"], cwd=repo_dir, env=env
-    )
-
-    yield repo_dir
-
-
-def _build_env_with_git_date_env_vars(date_time_string):
-    env = os.environ.copy()
-    env.update({env_var: date_time_string for env_var in _GIT_DATE_ENV_VARS})
-    return env
-
-
-def _init_repo(tmpdir, repo_type):
-    repo_dir = os.path.join(tmpdir.strpath, repo_type)
-    os.mkdir(repo_dir)
-    first_file_path = tmpdir.join(repo_type, "first_file")
-    first_file_path.write("first piece of data")
-
-    subprocess.check_output([repo_type, "init"], cwd=repo_dir)
-    subprocess.check_output([repo_type, "add", first_file_path.strpath], cwd=repo_dir)
-
-    return repo_dir
-
-
-@pytest.fixture(params=("git", "hg"))
-def repo(request, hg_repo, git_repo):
-    if request.param == "hg":
-        return get_repository(hg_repo)
-    return get_repository(git_repo)
-
-
-def _create_remote_repo(tmpdir, repo, remote_name, remote_path):
-    if repo.tool == "hg":
-        repo.run("phase", "--public", ".")
-
-    shutil.copytree(repo.path, str(tmpdir / remote_path))
-
-    if repo.tool == "git":
-        repo.run("remote", "add", remote_name, f"{tmpdir}/{remote_path}")
-        repo.run("fetch", remote_name)
-        repo.run("branch", "--set-upstream-to", f"{remote_name}/master")
-    if repo.tool == "hg":
-        with open(os.path.join(repo.path, ".hg/hgrc"), "a") as f:
-            f.write(f"[paths]\n{remote_name} = {tmpdir}/{remote_path}\n")
-
-
-@pytest.fixture
-def repo_with_remote(tmpdir, repo):
-    remote_name = "upstream"
-    _create_remote_repo(tmpdir, repo, remote_name, "remote_repo")
-    return repo, remote_name
 
 
 def test_get_repository(repo):
@@ -257,16 +157,16 @@ def test_remote_name(repo_with_remote):
         assert repo.remote_name == remote_name
 
 
-def test_all_remote_names(tmpdir, repo_with_remote):
+def test_all_remote_names(tmpdir, create_remote_repo, repo_with_remote):
     repo, remote_name = repo_with_remote
     assert repo.all_remote_names == [remote_name]
-    _create_remote_repo(tmpdir, repo, "upstream2", "remote_path2")
+    create_remote_repo(tmpdir, repo, "upstream2", "remote_path2")
     assert repo.all_remote_names == [remote_name, "upstream2"]
 
 
-def test_remote_name_many_remotes(tmpdir, repo_with_remote):
+def test_remote_name_many_remotes(tmpdir, create_remote_repo, repo_with_remote):
     repo, _ = repo_with_remote
-    _create_remote_repo(tmpdir, repo, "upstream2", "remote_path2")
+    create_remote_repo(tmpdir, repo, "upstream2", "remote_path2")
 
     if repo.tool == "git":
         assert repo.remote_name == "upstream2"  # Branch is set to an upstream one
@@ -275,10 +175,10 @@ def test_remote_name_many_remotes(tmpdir, repo_with_remote):
     assert repo.remote_name == "upstream"
 
 
-def test_remote_name_default_and_origin(tmpdir, repo_with_remote):
+def test_remote_name_default_and_origin(tmpdir, create_remote_repo, repo_with_remote):
     repo, _ = repo_with_remote
     remote_name = "origin" if repo.tool == "git" else "default"
-    _create_remote_repo(tmpdir, repo, remote_name, "remote_path2")
+    create_remote_repo(tmpdir, repo, remote_name, "remote_path2")
 
     if repo.tool == "git":
         repo.run("branch", "--unset-upstream")
@@ -286,28 +186,28 @@ def test_remote_name_default_and_origin(tmpdir, repo_with_remote):
     assert repo.remote_name == remote_name
 
 
-def test_default_branch_guess(repo):
+def test_default_branch_guess(default_git_branch, repo):
     if repo.tool == "git":
-        assert repo.default_branch == "refs/heads/master"
+        assert repo.default_branch == f"refs/heads/{default_git_branch}"
     else:
         assert repo.default_branch == "default"
 
 
-def test_default_branch_remote_query(repo_with_remote):
+def test_default_branch_remote_query(default_git_branch, repo_with_remote):
     repo, _ = repo_with_remote
     if repo.tool == "git":
-        assert repo.default_branch == "upstream/master"
+        assert repo.default_branch == f"upstream/{default_git_branch}"
     else:
         assert repo.default_branch == "default"
 
 
-def test_default_branch_cloned_metadata(tmpdir, repo):
+def test_default_branch_cloned_metadata(tmpdir, default_git_branch, repo):
     if repo.tool == "git":
         clone_repo_path = tmpdir / "cloned_repo"
         command = ("git", "clone", repo.path, clone_repo_path)
         subprocess.check_output(command, cwd=tmpdir)
         cloned_repo = get_repository(clone_repo_path)
-        assert cloned_repo.default_branch == "origin/master"
+        assert cloned_repo.default_branch == f"origin/{default_git_branch}"
 
 
 def assert_files(actual, expected):
@@ -428,33 +328,6 @@ def test_get_changed_files_two_revisions(repo):
     )
 
 
-@pytest.fixture
-def repo_with_upstream(tmpdir, repo):
-    with open(os.path.join(repo.path, "second_file"), "w") as f:
-        f.write("some data for the second file")
-
-    repo.run("add", ".")
-    repo.run("commit", "-m", "Add second_file")
-
-    if repo.tool == "hg":
-        repo.run("phase", "--public", ".")
-
-    shutil.copytree(repo.path, str(tmpdir / "remoterepo"))
-    upstream_location = None
-
-    if repo.tool == "git":
-        upstream_location = "upstream/master"
-        repo.run("remote", "add", "upstream", f"{tmpdir}/remoterepo")
-        repo.run("fetch", "upstream")
-        repo.run("branch", "--set-upstream-to", upstream_location)
-    if repo.tool == "hg":
-        upstream_location = f"{tmpdir}/remoterepo"
-        with open(os.path.join(repo.path, ".hg/hgrc"), "w") as f:
-            f.write(f"[paths]\ndefault = {upstream_location}")
-
-    return repo, upstream_location
-
-
 def test_workdir_outgoing(repo_with_upstream):
     repo, upstream_location = repo_with_upstream
 
@@ -546,13 +419,37 @@ def test_find_latest_common_revision(repo_with_remote):
             repo.find_latest_common_revision(base_ref, repo.head_rev)
             == expected_latest_common_revision
         )
-    else:
+
+        # Test no common ancestors
+        repo.run("checkout", "--orphan", "new_branch")
+        repo.run("add", ".")
+        repo.run("commit", "-m", "Add another new revision")
+        base_ref = f"{remote_name}/{repo.branch}"
+        assert (
+            repo.find_latest_common_revision(base_ref, repo.head_rev)
+            == Repository.NULL_REVISION
+        )
+    elif repo.tool == "hg":
         # hg doesn't have the concept of remote branches
         assert (
             repo.find_latest_common_revision(
                 expected_latest_common_revision, repo.head_rev
             )
             == expected_latest_common_revision
+        )
+
+        # Test no common ancestors
+        repo.run("update", Repository.NULL_REVISION)
+        with open(os.path.join(repo.path, "some_file"), "w") as f:
+            f.write("some content")
+
+        repo.run("add", ".")
+        repo.run("commit", "-m", "Add another new revision")
+        assert (
+            repo.find_latest_common_revision(
+                repo.head_rev, expected_latest_common_revision
+            )
+            == Repository.NULL_REVISION
         )
 
 

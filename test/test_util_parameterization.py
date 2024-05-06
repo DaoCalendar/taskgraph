@@ -5,7 +5,9 @@
 import datetime
 
 import pytest
-from taskcluster_urls import test_root_url
+
+# prevent pytest thinking this is a test
+from taskcluster_urls import test_root_url as _test_root_url
 
 from taskgraph.util.parameterization import resolve_task_references, resolve_timestamps
 from taskgraph.util.taskcluster import get_root_url
@@ -88,7 +90,7 @@ def test_task_refs_multiple(assert_task_refs):
 
 
 def test_task_refs_embedded(assert_task_refs):
-    "resolve_task_references resolves ebmedded references"
+    "resolve_task_references resolves embedded references"
     assert_task_refs(
         {"embedded": {"task-reference": "stuff before <edge3> stuff after"}},
         {"embedded": "stuff before tid3 stuff after"},
@@ -122,6 +124,14 @@ def test_task_refs_decision(assert_task_refs):
     )
 
 
+def test_task_refs_key(assert_task_refs):
+    "resolve_task_references resolves task references in a dict's keys"
+    assert_task_refs(
+        {"dict": {"task-reference": {"<edge3>": "<ignored>"}}},
+        {"dict": {"tid3": "<ignored>"}},
+    )
+
+
 def test_task_refs_invalid():
     "resolve_task_references raises a KeyError on reference to an invalid task"
     with pytest.raises(KeyError):
@@ -136,11 +146,11 @@ def test_task_refs_invalid():
 
 @pytest.fixture
 def assert_artifact_refs(monkeypatch):
-    monkeypatch.setenv("TASKCLUSTER_ROOT_URL", test_root_url())
+    monkeypatch.setenv("TASKCLUSTER_ROOT_URL", _test_root_url())
 
     def inner(input, output):
         # Clear memoized function
-        get_root_url.clear()
+        get_root_url.cache_clear()
         taskid_for_edge_name = {"edge%d" % n: "tid%d" % n for n in range(1, 4)}
         assert (
             resolve_task_references(
@@ -159,7 +169,7 @@ def test_artifact_refs_in_list(assert_artifact_refs):
         {
             "in-a-list": [
                 "stuff",
-                test_root_url() + "/api/queue/v1/task/tid1/artifacts/public/foo/bar",
+                _test_root_url() + "/api/queue/v1/task/tid1/artifacts/public/foo/bar",
             ]
         },
     )
@@ -171,7 +181,7 @@ def test_artifact_refs_in_dict(assert_artifact_refs):
         {"in-a-dict": {"stuff": {"artifact-reference": "<edge2/public/bar/foo>"}}},
         {
             "in-a-dict": {
-                "stuff": test_root_url()
+                "stuff": _test_root_url()
                 + "/api/queue/v1/task/tid2/artifacts/public/bar/foo"
             }
         },
@@ -187,11 +197,22 @@ def test_artifact_refs_in_string(assert_artifact_refs):
             }
         },
         {
-            "stuff": test_root_url()
+            "stuff": _test_root_url()
             + "/api/queue/v1/task/tid1/artifacts/public/filename and "
-            + test_root_url()
+            + _test_root_url()
             + "/api/queue/v1/task/tid2/artifacts/public/bar"
         },
+    )
+
+
+def test_artifact_refs_private(monkeypatch, assert_artifact_refs):
+    "resolve_task_references resolves private artifact references"
+    tc_proxy_url = "https://taskcluster-proxy.net"
+    monkeypatch.setenv("TASKCLUSTER_PROXY_URL", tc_proxy_url)
+
+    assert_artifact_refs(
+        {"artifact-reference": "<edge1/private/foo>"},
+        f"{tc_proxy_url}/api/queue/v1/task/tid1/artifacts/private/foo",
     )
 
 
@@ -212,7 +233,7 @@ def test_artifact_refs_decision(assert_artifact_refs):
     assert_artifact_refs(
         {"stuff": {"artifact-reference": "<decision/public/artifact>"}},
         {
-            "stuff": test_root_url()
+            "stuff": _test_root_url()
             + "/api/queue/v1/task/tid-decision/artifacts/public/artifact"
         },
     )

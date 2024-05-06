@@ -20,8 +20,8 @@ Create a file system layout similar to:
 ::
 
    taskcluster
-   ├── ci
-   │   ├── config.yml
+   ├── config.yml
+   ├── kinds
    │   └── hello
    |       └── kind.yml
    └── myrepo_taskgraph
@@ -36,7 +36,7 @@ similarly only a convention (but it must be importable).
 Populate the Config File
 ------------------------
 
-The config file lives at ``taskcluster/ci/config.yml`` and must conform to the
+The config file lives at ``taskcluster/config.yml`` and must conform to the
 :py:data:`~taskgraph.config.graph_config_schema`.
 
 Create the ``config.yml`` file to look like:
@@ -76,39 +76,30 @@ Define a Task
 -------------
 
 :term:`Kinds <Kind>` are groupings of tasks that share certain characteristics
-with one another. Each subdirectory in ``taskcluster/ci`` corresponds to a
+with one another. Each subdirectory in ``taskcluster/kinds`` corresponds to a
 different kind and contains a ``kind.yml`` file. These files define some
 properties that control how Taskgraph will generate the tasks, as well as the
 starting definitions of the tasks themselves. If you followed the layout above,
 you have a ``hello`` kind. For this next section we'll be editing
-``taskcluster/ci/hello/kind.yml``.
+``taskcluster/kinds/hello/kind.yml``.
 
-#. First declare a loader. Loaders determine how the task definitions get read.
-   The most common is the :func:`transform loader
-   <taskgraph.loader.transform.loader>`:
-
-   .. code-block:: yaml
-
-    loader: taskgraph.loader.transform:loader
-
-#. Next declare the set of :term:`transforms <transform>` that will be applied
-   to tasks. Usually there is at least a kind specific set of transforms, as
-   well as the general purpose :mod:`-taskgraph.transforms.task` transforms.
-   Practically every task should use the latter, as they perform the final
-   steps to modify the tasks into the `format Taskcluster expects`_. In our
-   example:
+#. Declare the set of :term:`transforms <transform>` that will be applied
+   to tasks. By default, taskgraph will include the
+   :mod:`-taskgraph.transforms.run` and :mod:`-taskgraph.transforms.task`
+   transforms, which are used by the vast majority of simple tasks. It is also
+   quite common for kind-specific transforms to be used, which we will do here
+   for the purpose of demonstration. In our example:
 
    .. code-block:: yaml
 
     transforms:
         - myrepo_taskgraph.transforms.hello:transforms
-        - taskgraph.transforms.task:transforms
 
 #. Finally we define the task under the ``tasks`` key. The format for the
    initial definition here can vary wildly from one kind to another, it all
    depends on the transforms that are used. It's conventional for transforms to
    define a schema (but not required). So often you can look at the first
-   transform file to see what schema is expected of your job. But since we
+   transform file to see what schema is expected of your task. But since we
    haven't created the first transforms yet, let's define our task like this
    for now:
 
@@ -123,10 +114,8 @@ Here is the combined ``kind.yml`` file:
 
 .. code-block:: yaml
 
- loader: taskgraph.loader.transform:loader
  transforms:
      - myrepo_taskgraph.transforms.hello:transforms
-     - taskgraph.transforms.task:transforms
  tasks:
      taskcluster:
          description: "Says hello to Taskcluster"
@@ -181,7 +170,7 @@ comments for explanations):
            if "description" not in task:
                task["description"] = f"Says Hello {task['text']}"
            task["label"] = f"{config.kind}-{task.pop('name')}"
-           # This is what was defined in `taskcluster/ci/config.yml`.
+           # This is what was defined in `taskcluster/config.yml`.
            task["worker-type"] = "linux"
            task["worker"] = {
                "command": task.pop["command"],

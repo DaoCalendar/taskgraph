@@ -6,6 +6,8 @@ create a :term:`Decision Task` to generate and submit your graph. This tutorial
 assumes you have a functional Taskgraph setup. If you don't already have one,
 see :doc:`creating-a-task-graph`.
 
+.. _configure your project:
+
 Configuring your Project
 ------------------------
 
@@ -20,10 +22,8 @@ them to help get your repository configured.
    dedicated repository. Here are some configuration repositories for known
    Taskcluster instances:
 
-   * `Firefox-CI configuration`_ (managed by the Release Engineering team)
-   * `Community configuration`_ (managed by the Taskcluster team)
-
-
+   * `Firefox-CI configuration`_ (managed by the Release Engineering team in `#firefox-ci`_)
+   * `Community configuration`_ (managed by the Taskcluster team in `#taskcluster`_)
 
 If using Github, you'll also need to install the `Taskcluster Github
 integration`_. Please note that only org administrators can enable the
@@ -39,10 +39,12 @@ integration.
 
 .. _tc-admin: https://github.com/taskcluster/tc-admin
 .. _Firefox-CI configuration: https://hg.mozilla.org/ci/ci-configuration/
-.. _Community configuration: https://github.com/mozilla/community-tc-config
+.. _Community configuration: https://github.com/taskcluster/community-tc-config
 .. _Taskcluster Github integration: https://docs.taskcluster.net/docs/manual/using/github
 .. _Firefox-CI Github integration: https://github.com/apps/firefoxci-taskcluster
 .. _Community Github integration: https://github.com/apps/community-tc-integration
+.. _#firefox-ci: https://matrix.to/#/#firefox-ci:mozilla.org
+.. _#taskcluster: https://matrix.to/#/#taskcluster:mozilla.org
 
 Populate the Requirements
 -------------------------
@@ -256,12 +258,8 @@ here is the recommended method:
    For now, this tutorial will assume we're using the `docker-worker
    payload`__.
 
-   a. Define the image. Taskgraph conveniently provides pre-built images for
-      certain Decision task contexts. These are:
-
-      * ``taskgraph:decision`` - A general purpose image.
-      * ``taskgraph:decision-mobile`` - Built on top of ``taskgraph:decision`` with
-        some additions needed for Android applications at Mozilla.
+   a. Define the image. Taskgraph conveniently provides a pre-built image for
+      most Decision task contexts, called ``taskgraph:decision``.
 
       You may also build your own image if desired, either on top of
       ``taskgraph:decision`` or from scratch. For this tutorial we'll just
@@ -274,7 +272,7 @@ here is the recommended method:
                image:
                    mozillareleases/taskgraph:decision-cf4b4b4baff57d84c1f9ec8fcd70c9839b70a7d66e6430a6c41ffe67252faa19@sha256:425e07f6813804483bc5a7258288a7684d182617ceeaa0176901ccc7702dfe28
 
-      You should use the `latest versions of the images`_. Note that both the
+      You should use the `latest version of the image`_. Note that both the
       image id and sha256 are required (separated by ``@``).
 
    b. Enable the `taskclusterProxy`_ feature.
@@ -392,6 +390,6 @@ which to build.
 .. _docker-worker: https://docs.taskcluster.net/docs/reference/workers/docker-worker/payload
 .. _generic-worker: https://docs.taskcluster.net/docs/reference/workers/generic-worker/docker-posix-payload
 __ docker-worker_
-.. _latest versions of the images: https://hub.docker.com/r/mozillareleases/taskgraph/tags
+.. _latest version of the image: https://hub.docker.com/r/mozillareleases/taskgraph/tags
 .. _taskclusterProxy: https://docs.taskcluster.net/docs/reference/workers/docker-worker/features#feature-taskclusterproxy
 .. _run-task: https://github.com/taskcluster/taskgraph/file/tip/src/taskgraph/run-task/run-task

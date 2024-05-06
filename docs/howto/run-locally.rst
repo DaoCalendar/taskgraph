@@ -3,14 +3,14 @@ Run Taskgraph Locally
 
 When first starting out with Taskgraph, it's tempting to test changes by
 pushing to a pull request (or try server) and checking whether your
-modifications have the desired affect on the impacted task(s). This isn't ideal
+modifications have the desired effect on the impacted task(s). This isn't ideal
 because the turn around time is slow, you may hit easily preventable errors in
 the :term:`Decision Task`, and it wastes money running tasks that are
 irrelevant to your changes.
 
 So before you even push your changes, it's best practice to verify whether
 graph generation succeeds as well as to sanity check that your changes are
-having the desired affect.
+having the desired effect.
 
 Generating Graphs
 -----------------
@@ -60,11 +60,11 @@ is used, the full JSON representation of all task definitions are displayed.
 A regular expression that matches against task labels. Useful for filtering
 down the output to only display desired tasks.
 
-``--target-kind``
-+++++++++++++++++
+``-k/--target-kind``
+++++++++++++++++++++
 
 Only generate tasks of the given ``kind`` or any kinds listed in that kind's
-``kind-dependencies`` key.
+``kind-dependencies`` key. Can be passed in multiple times.
 
 ``-p/--parameters``
 +++++++++++++++++++

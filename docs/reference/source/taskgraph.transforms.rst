@@ -7,7 +7,7 @@ Subpackages
 .. toctree::
    :maxdepth: 4
 
-   taskgraph.transforms.job
+   taskgraph.transforms.run
 
 Submodules
 ----------
@@ -16,6 +16,14 @@ taskgraph.transforms.base module
 --------------------------------
 
 .. automodule:: taskgraph.transforms.base
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+taskgraph.transforms.from\_deps module
+--------------------------------------
+
+.. automodule:: taskgraph.transforms.from_deps
    :members:
    :undoc-members:
    :show-inheritance:
@@ -48,6 +56,14 @@ taskgraph.transforms.fetch module
 ---------------------------------
 
 .. automodule:: taskgraph.transforms.fetch
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+taskgraph.transforms.notify module
+----------------------------------
+
+.. automodule:: taskgraph.transforms.notify
    :members:
    :undoc-members:
    :show-inheritance:

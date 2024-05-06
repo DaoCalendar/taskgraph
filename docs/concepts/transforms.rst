@@ -1,15 +1,16 @@
 Transforms
 ==========
 
-Many task kinds generate tasks by a process of transforming job descriptions
-into task definitions. The basic operation is simple, although the sequence of
-transforms applied for a particular kind may not be!
+Often tasks grow in complexity such that it is annoying or even impossible to
+specify as a YAML object. Taskgraph has the concept of :term:`transforms
+<Transform>` to help deal with this. Transforms allow you to layer programmatic
+logic on top of your task definitions.
 
 Overview
 --------
 
 To begin, a kind implementation generates a collection of tasks; see
-:doc:`loading`. These are Python dictionaries that describe "semantically"
+:doc:`loading`. These are Python dictionaries that describe semantically
 what the task should do.
 
 The kind also defines a sequence of transformations. These are applied in order
@@ -18,26 +19,67 @@ into smaller tasks (for example, chunking a test suite). Later transforms
 rewrite the tasks entirely, with the final result being a task definition conforming
 to the `Taskcluster task schema`_.
 
+Specifying Transforms
+.....................
+
+Transforms are specified as a list of strings, where each string references a
+:class:`taskgraph.transforms.base.TransformSequence`. For example, in a ``kind.yml``
+file, you may add:
+
+.. code-block:: yaml
+
+   transforms:
+     - project_taskgraph.transforms:transforms
+     - taskgraph.transforms.task:transforms
+
+The format of the reference is ``<module path>:<object>``. So the above example
+will first load the ``transforms`` object from the
+``project_taskgraph.transforms`` module, then the ``transforms`` object from
+the ``taskgraph.transforms.task`` module. All referenced modules must be
+available in the Python path. Note how transforms can be defined both within
+the project that needs them, or in third party packages (like Taskgraph itself).
+
+The ``taskgraph.transforms.task`` transforms are a special set of transforms that
+nearly every task should use. These transforms are responsible for formatting a task
+into a `valid Taskcluster task definition`_.
+
+.. _valid Taskcluster task definition: https://docs.taskcluster.net/docs/reference/platform/queue/task-schema
+
+Default Object
+``````````````
+
+Using the name ``transforms`` for the object is a convention, and Taskgraph will
+use that by default if no object is specified. So the following example is equivalent
+to the previous one:
+
+.. code-block:: yaml
+
+   transforms:
+     - project_taskgraph.transforms
+     - taskgraph.transforms.task
+
 Transform Functions
 ...................
 
-Each transformation looks like this:
+Each transform function looks like:
 
 .. code-block:: python
 
-    from taskgraph.transforms.base import TransformSequence
+    from typing import Dict, Iterator
+
+    from taskgraph.transforms.base import TransformConfig, TransformSequence
 
     transforms = TransformSequence()
 
     @transforms.add
-    def transform_a_task(config, tasks):
+    def transform_a_task(config: TransformConfig, tasks: Iterator[Dict]) -> Iterator[Dict]:
         """This transform ..."""  # always include a docstring!
         for task in tasks:
             # do stuff to the task..
             yield task
 
 The ``config`` argument is a Python object containing useful configuration for
-the kind, and is a subclass of
+the kind, and is an instance of
 :class:`taskgraph.transforms.base.TransformConfig`, which specifies a few of
 its attributes. Kinds may subclass and add additional attributes if necessary.
 
@@ -58,7 +100,7 @@ various points in the transformation process. These schemas accomplish two
 things: they provide a place to add comments about the meaning of each field,
 and they enforce that the fields are actually used in the documented fashion.
 
-Using schemas is a best practice at it allows others to more easily reason
+Using schemas is a best practice as it allows others to more easily reason
 about the state of the tasks at given points. Here is an example:
 
 .. code-block:: python
@@ -124,29 +166,29 @@ stages defined by schemas. The process begins with the raw data structures
 parsed from the YAML files in the kind configuration. This data can processed
 by kind-specific transforms resulting in a "kind specific description".
 
-From there, it's common for tasks to use the :mod:`job transforms
-<taskgraph.transforms.job>` which provide convenient utilities for things such
+From there, it's common for tasks to use the :mod:`run transforms
+<taskgraph.transforms.run>` which provide convenient utilities for things such
 as cloning repositories, downloading artifacts, caching and much more! After
-these transforms tasks will conform to the "job description".
+these transforms tasks will conform to the "run description".
 
 Finally almost all kinds should use the :mod:`task transforms
 <taskgraph.transforms.task>`. These transforms massage the task into the
 `Taskcluster task schema`_
 
-Job Descriptions
+Run Descriptions
 ................
 
-A job description defines what to run in the task. It is a combination of a
+A *run description* defines what to run in the task. It is a combination of a
 ``run`` section and all of the fields from a task description. The run section
 has a ``using`` property that defines how this task should be run; for example,
 ``run-task`` to run arbitrary commands, or ``toolchain-script`` to invoke a
 well defined script. The remainder of the run section is specific to the
 run-using implementation.
 
-The effect of a job description is to say "run this thing on this worker". The
-job description must contain enough information about the worker to identify
+The effect of a run description is to say "run this thing on this worker". The
+run description must contain enough information about the worker to identify
 the workerType and the implementation (docker-worker, generic-worker, etc.).
-Alternatively, job descriptions can specify the ``platforms`` field in
+Alternatively, run descriptions can specify the ``platforms`` field in
 conjunction with the ``by-platform`` key to specify multiple workerTypes and
 implementations. Any other task-description information is passed along
 verbatim, although it is augmented by the run-using implementation.

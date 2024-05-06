@@ -7,7 +7,7 @@ import os
 
 import pytest
 from requests import Session
-from requests.exceptions import HTTPError
+from requests.exceptions import HTTPError, RetryError
 from requests.packages.urllib3.util.retry import Retry
 from responses import matchers
 
@@ -28,7 +28,7 @@ def mock_production_taskcluster_root_url(monkeypatch):
 
 @pytest.fixture
 def root_url(mock_environ):
-    tc.get_root_url.clear()
+    tc.get_root_url.cache_clear()
     return tc.get_root_url(False)
 
 
@@ -36,23 +36,22 @@ def root_url(mock_environ):
 def proxy_root_url(monkeypatch, mock_environ):
     monkeypatch.setenv("TASK_ID", "123")
     monkeypatch.setenv("TASKCLUSTER_PROXY_URL", "https://taskcluster-proxy.net")
-    tc.get_root_url.clear()
+    tc.get_root_url.cache_clear()
     return tc.get_root_url(True)
 
 
 def test_get_root_url(monkeypatch):
-
-    tc.get_root_url.clear()
+    tc.get_root_url.cache_clear()
     assert tc.get_root_url(False) == tc.PRODUCTION_TASKCLUSTER_ROOT_URL
 
     custom_url = "https://taskcluster-root.net"
     monkeypatch.setenv("TASKCLUSTER_ROOT_URL", custom_url)
-    tc.get_root_url.clear()
+    tc.get_root_url.cache_clear()
     assert tc.get_root_url(False) == custom_url
 
     # trailing slash is normalized
     monkeypatch.setenv("TASKCLUSTER_ROOT_URL", custom_url + "/")
-    tc.get_root_url.clear()
+    tc.get_root_url.cache_clear()
     assert tc.get_root_url(False) == custom_url
 
     with pytest.raises(RuntimeError):
@@ -67,7 +66,7 @@ def test_get_root_url(monkeypatch):
     proxy_url = "https://taskcluster-proxy.net"
     monkeypatch.setenv("TASKCLUSTER_PROXY_URL", proxy_url)
     assert tc.get_root_url(True) == proxy_url
-    tc.get_root_url.clear()
+    tc.get_root_url.cache_clear()
 
     # no default set
     monkeypatch.setattr(tc, "PRODUCTION_TASKCLUSTER_ROOT_URL", None)
@@ -105,6 +104,30 @@ def test_do_request(responses):
     responses.replace(responses.GET, "https://example.org", status=404)
     with pytest.raises(HTTPError):
         tc._do_request("https://example.org")
+
+
+@pytest.mark.parametrize(
+    "use_proxy,expected",
+    (
+        pytest.param(
+            False,
+            "https://tc.example.com/api/queue/v1/task/abc/artifacts/public/log.txt",
+            id="use_proxy=False",
+        ),
+        pytest.param(
+            True,
+            "https://taskcluster-proxy.net/api/queue/v1/task/abc/artifacts/public/log.txt",
+            id="use_proxy=True",
+        ),
+    ),
+)
+def test_get_artifact_url(monkeypatch, use_proxy, expected):
+    if use_proxy:
+        monkeypatch.setenv("TASKCLUSTER_PROXY_URL", "https://taskcluster-proxy.net")
+
+    task_id = "abc"
+    path = "public/log.txt"
+    assert tc.get_artifact_url(task_id, path, use_proxy) == expected
 
 
 def test_get_artifact(responses, root_url):
@@ -194,7 +217,7 @@ def test_find_task_id(responses, root_url):
         f"{root_url}/api/index/v1/task/{index}",
         status=500,
     )
-    with pytest.raises(HTTPError):
+    with pytest.raises(RetryError):
         tc.find_task_id(index)
 
 
@@ -356,3 +379,154 @@ def test_list_task_group_incomplete_tasks(responses, root_url):
         },
     )
     assert list(tc.list_task_group_incomplete_tasks(tgid)) == ["1", "2", "3"]
+
+
+def test_get_ancestors(responses, root_url):
+    tc.get_task_definition.cache_clear()
+    tc._get_deps.cache_clear()
+    base_url = f"{root_url}/api/queue/v1/task"
+    responses.add(
+        responses.GET,
+        f"{base_url}/fff",
+        json={
+            "dependencies": ["eee", "ddd"],
+            "metadata": {
+                "name": "task-fff",
+            },
+        },
+    )
+    responses.add(
+        responses.GET,
+        f"{base_url}/eee",
+        json={
+            "dependencies": [],
+            "metadata": {
+                "name": "task-eee",
+            },
+        },
+    )
+    responses.add(
+        responses.GET,
+        f"{base_url}/ddd",
+        json={
+            "dependencies": ["ccc"],
+            "metadata": {
+                "name": "task-ddd",
+            },
+        },
+    )
+    responses.add(
+        responses.GET,
+        f"{base_url}/ccc",
+        json={
+            "dependencies": [],
+            "metadata": {
+                "name": "task-ccc",
+            },
+        },
+    )
+    responses.add(
+        responses.GET,
+        f"{base_url}/bbb",
+        json={
+            "dependencies": ["aaa"],
+            "metadata": {
+                "name": "task-bbb",
+            },
+        },
+    )
+    responses.add(
+        responses.GET,
+        f"{base_url}/aaa",
+        json={
+            "dependencies": [],
+            "metadata": {
+                "name": "task-aaa",
+            },
+        },
+    )
+
+    got = tc.get_ancestors(["bbb", "fff"])
+    expected = {
+        "task-aaa": "aaa",
+        "task-ccc": "ccc",
+        "task-ddd": "ddd",
+        "task-eee": "eee",
+    }
+    assert got == expected, f"got: {got}, expected: {expected}"
+
+
+def test_get_ancestors_string(responses, root_url):
+    tc.get_task_definition.cache_clear()
+    tc._get_deps.cache_clear()
+    base_url = f"{root_url}/api/queue/v1/task"
+    responses.add(
+        responses.GET,
+        f"{base_url}/fff",
+        json={
+            "dependencies": ["eee", "ddd"],
+            "metadata": {
+                "name": "task-fff",
+            },
+        },
+    )
+    responses.add(
+        responses.GET,
+        f"{base_url}/eee",
+        json={
+            "dependencies": [],
+            "metadata": {
+                "name": "task-eee",
+            },
+        },
+    )
+    responses.add(
+        responses.GET,
+        f"{base_url}/ddd",
+        json={
+            "dependencies": ["ccc", "bbb"],
+            "metadata": {
+                "name": "task-ddd",
+            },
+        },
+    )
+    responses.add(
+        responses.GET,
+        f"{base_url}/ccc",
+        json={
+            "dependencies": ["aaa"],
+            "metadata": {
+                "name": "task-ccc",
+            },
+        },
+    )
+    responses.add(
+        responses.GET,
+        f"{base_url}/bbb",
+        json={
+            "dependencies": [],
+            "metadata": {
+                "name": "task-bbb",
+            },
+        },
+    )
+    responses.add(
+        responses.GET,
+        f"{base_url}/aaa",
+        json={
+            "dependencies": [],
+            "metadata": {
+                "name": "task-aaa",
+            },
+        },
+    )
+
+    got = tc.get_ancestors("fff")
+    expected = {
+        "task-aaa": "aaa",
+        "task-bbb": "bbb",
+        "task-ccc": "ccc",
+        "task-ddd": "ddd",
+        "task-eee": "eee",
+    }
+    assert got == expected, f"got: {got}, expected: {expected}"

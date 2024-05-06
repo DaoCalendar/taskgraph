@@ -45,6 +45,10 @@ head_tag
 ~~~~~~~~
    The tag attached to the revision, if any.
 
+files_changed
+~~~~~~~~~~~~~
+   The list of all files added or modified by the push.
+
 owner
 ~~~~~
    Email address indicating the person who made the push. Note that this
@@ -101,6 +105,20 @@ Target Set
 
 These parameters are used at the ``target_task`` phase of :ref:`graph generation
 <Graph Generation>`.
+
+enable_always_target
+~~~~~~~~~~~~~~~~~~~~
+
+   Can either be a boolean or a list of kinds.
+
+   When ``True``, any task with the ``always_target`` attribute will be included
+   in the ``target_task_graph`` regardless of whether they were filtered out by
+   the ``target_tasks_method`` or not. Because they are not part of the
+   ``target_set``, they will still be eligible for optimization when the
+   ``optimize_target_tasks`` parameter is ``False``.
+
+   When specified as a list of kinds, only tasks with a matching kind will be
+   eligible for addition to the graph.
 
 filters
 ~~~~~~~

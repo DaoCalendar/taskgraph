@@ -14,7 +14,20 @@ __pycache__/
 
 .pytest_cache/
 .python-version
+.ruff_cache/
 .tox/
+
+#python virtual environement
+/taskgraph/
 
 # Coverage
 .coverage
+
+# Artifacts
+artifacts/
+
+#Idea
+.idea
+
+# MacOS specific
+.DS_Store

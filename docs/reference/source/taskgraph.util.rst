@@ -28,10 +28,10 @@ taskgraph.util.cached\_tasks module
    :undoc-members:
    :show-inheritance:
 
-taskgraph.util.decision module
-------------------------------
+taskgraph.util.dependencies module
+----------------------------------
 
-.. automodule:: taskgraph.util.decision
+.. automodule:: taskgraph.util.dependencies
    :members:
    :undoc-members:
    :show-inheritance:
